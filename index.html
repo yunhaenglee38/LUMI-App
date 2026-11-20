@@ -1,0 +1,298 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>LUMI</title>
+<link rel="manifest" href="manifest.webmanifest" />
+<meta name="theme-color" content="#0b1538" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-title" content="LUMI" />
+<meta name="apple-mobile-web-app-status-bar-style" content="default" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<link rel="icon" id="favicon" type="image/jpeg" href="data:," />
+<!--
+  LUMI 앱 (스마트폰·PC 웹 앱, GitHub Pages) · 앱 ver.1.0.0 — 바탕화면 실행기(YH-AI-assisstant/install/LUMI.html) ver.2를 바탕으로 함
+  - 홈 화면에 추가하면 앱처럼 열린다(manifest.webmanifest, sw.js). 이 페이지에는 토큰·연구 기록이 없다(공개 저장소).
+  - 열 때마다 GitHub 저장소의 remote 폴더에서 가장 높은 버전의 LUMI agent(AI assisstant LUMI ver.x.y.z.html)를 받아 띄운다.
+    → LUMI agent가 새 버전으로 바뀌어도 다시 설치할 필요가 없다.
+  - 처음 한 번만 저장소·토큰을 입력한다. 토큰은 이 브라우저의 localStorage에만 저장된다(LUMI agent와 같은 자리).
+  - 인터넷이 안 되면 마지막으로 받은 LUMI agent를 띄운다.
+  - 보안 설정(CSP)은 LUMI agent와 그 안의 도구(강연 분석의 AI API 등)가 쓰는 곳만 허용한다.
+    이 설정은 LUMI agent에도 그대로 적용되므로, 도구가 새 서비스에 연결해야 하면 이 파일을 고쳐 다시 설치해야 한다.
+-->
+<meta http-equiv="Content-Security-Policy" content="
+  default-src 'none';
+  connect-src https://api.github.com https://generativelanguage.googleapis.com https://api.openai.com https://api.anthropic.com https://api.groq.com https://www.youtube.com blob: data:;
+  script-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net 'unsafe-inline';
+  style-src 'unsafe-inline' https://fonts.googleapis.com https://cdn.jsdelivr.net;
+  img-src 'self' data: https: blob:;
+  manifest-src 'self';
+  font-src data: https://fonts.gstatic.com https://cdn.jsdelivr.net https://fastly.jsdelivr.net;
+  media-src blob: data:;
+  worker-src 'self' blob:;
+  frame-src 'self' blob: data:;
+  base-uri 'none';
+  form-action 'none';
+" />
+<style>
+  :root{--bg:#f8fafc;--line:#e2e8f0;--fg:#334155;--head:#0f172a;--muted:#64748b;--accent:#4f46e5;--accent2:#4338ca;--err:#e11d48}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--bg);color:var(--fg);
+    font-family:ui-sans-serif,system-ui,sans-serif,"Apple Color Emoji","Segoe UI Emoji";
+    padding:max(16px,env(safe-area-inset-top)) max(16px,env(safe-area-inset-right)) max(16px,env(safe-area-inset-bottom)) max(16px,env(safe-area-inset-left))}
+  .steps{text-align:left;font-size:.9rem;line-height:1.7;margin:12px 0 0;padding-left:20px}
+  .steps b{color:var(--head)}
+  button.ghost{background:#fff;color:var(--fg);border:1px solid var(--line)}
+  .box{width:100%;max-width:440px;background:#fff;border:1px solid var(--line);border-radius:20px;padding:26px 24px;
+    box-shadow:0 10px 30px rgba(15,23,42,.08);text-align:center}
+  .icon{width:132px;height:132px;border-radius:28px;display:block;margin:0 auto 14px;background:#0b1538;
+    box-shadow:0 10px 26px rgba(79,70,229,.35)}
+  h1{font-size:1.2rem;color:var(--head);margin:0 0 4px}
+  #status{color:var(--muted);font-size:.92rem;margin:6px 0 0;line-height:1.6}
+  #status.err{color:var(--err)}
+  form{text-align:left;margin-top:16px}
+  label{display:block;font-size:.85rem;color:var(--muted);margin:.7rem 0 .25rem;font-weight:600}
+  input{width:100%;border:1px solid var(--line);border-radius:12px;padding:11px 12px;font-size:1rem;font-family:inherit}
+  button{width:100%;margin-top:14px;border:none;border-radius:12px;padding:12px;font-size:1rem;font-weight:700;
+    background:var(--accent);color:#fff;font-family:inherit;cursor:pointer}
+  button:hover{background:var(--accent2)}
+  .hint{font-size:.8rem;color:var(--muted);line-height:1.55;margin:.5rem 0 0}
+  .hidden{display:none}
+</style>
+</head>
+<body>
+<div class="box">
+  <img class="icon" id="icon" alt="LUMI AI Assistant" />
+  <h1>AI assisstant LUMI</h1>
+  <p id="status">최신 LUMI agent를 불러오는 중…</p>
+  <div id="install" class="hidden">
+    <p class="hint" style="font-size:.9rem">홈 화면에 추가하면 앱처럼 열려요. PC에서 바꾼 기능·설정이 휴대폰에도 바로 똑같이 적용돼요.</p>
+    <button id="installBtn" class="hidden">📲 앱 설치</button>
+    <ol class="steps" id="iosSteps">
+      <li><b>아이폰(Safari)</b>: 아래 가운데 <b>공유</b> 버튼(□↑) → <b>홈 화면에 추가</b> → 추가</li>
+      <li><b>안드로이드(Chrome)</b>: 위 <b>앱 설치</b> 버튼, 또는 오른쪽 위 <b>⋮</b> → <b>홈 화면에 추가</b>(앱 설치)</li>
+      <li>홈 화면의 <b>LUMI</b> 아이콘으로 열고, 처음 한 번 저장소·토큰을 넣어요</li>
+    </ol>
+    <button id="openNow" class="ghost">설치하지 않고 바로 열기</button>
+  </div>
+  <form id="setup" class="hidden" autocomplete="off">
+    <p class="hint">처음 한 번만 연결해 주세요. 정보는 이 기기의 브라우저(앱)에만 저장돼요(파일·저장소에는 들어가지 않아요).
+      토큰은 이 저장소에 <b>Contents·Actions: Read and write</b> 권한으로 발급한 fine-grained 토큰을 쓰세요
+      (문헌·특허, 메일 발송 도구도 쓰려면 그 두 저장소도 함께 선택).</p>
+    <label>저장소 소유자 (owner)</label><input id="s_owner" placeholder="예: my-github-id" />
+    <label>저장소 이름 (repo)</label><input id="s_repo" placeholder="예: my-lumi" />
+    <label>브랜치</label><input id="s_branch" value="main" />
+    <label>Personal Access Token</label><input id="s_token" placeholder="github_pat_..." />
+    <button type="submit">연결하고 열기</button>
+  </form>
+  <button id="retry" class="hidden">다시 시도</button>
+</div>
+<script>
+"use strict";
+(function(){
+  const LS = "yh_research_remote_v1";          // LUMI agent와 같은 저장 자리 (토큰·저장소·고른 계정)
+  const CACHE = "lumi_remote_cache";           // 마지막으로 받은 LUMI agent (인터넷이 안 될 때)
+  const RE = /^AI assisstant LUMI ver\.(\d+)\.(\d+)\.(\d+)\.html$/;
+  const ICON = "data:image/jpeg;base64," + [
+    /*LUMI_ICON_START*/
+      "/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAx",
+      "NDQ0Hyc5PTgyPC4zNDL/2wBDAQkJCQwLDBgNDRgyIRwhMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIy",
+      "MjIyMjIyMjL/wgARCADIAMgDASIAAhEBAxEB/8QAGwAAAQUBAQAAAAAAAAAAAAAAAAECAwQFBgf/xAAZAQADAQEBAAAAAAAAAAAA",
+      "AAAAAQIDBAX/2gAMAwEAAhADEAAAAe/wzyalo5Yu0gKAKrSK5QYrwI1kQIyRAjHoNiPRDByBp+keRvl+6mGY15vlh0QoOAUc0Kr2",
+      "mvdJShdZnqKCa0QZjbsa0qtsRzUKStlxtkUcSSMS0zKJFUfSSSeKiRjXtLM2eo3a2jq1zJoYD406athrJbwtd+lcq7Ywq0yknZlt",
+      "FfpOmp8yzXUsFCVVHNWIldSNPPmaS2/RuOj4nsuDeN1/WefS9R2V6EHAdTx3UvXWwdC1V8xDo0seim2eIVjKlZKjFFA50lNjx9Fy",
+      "1Q6Eyru62g+etxPoGFppltqLKsuqgqvUZ+6a1rd6i9MtvTXsMuMyut5RXULmfWiEZKfJDJVPsw6eira+PYqult87fObUmZKuXPpa",
+      "2Bo70WXFm9vSoXa6lmlZzcsUNPKreDOmq30tjdHKcRChz45DSS5TuaUOuxMvdVxV+eLp8uSs89io6jTlv4OvM0n0Y3fRV4q2d7GD",
+      "QghU6tytp0wwywoaBKXQzXurMtN1PXrVHNXNHItVl0N3Kivz9lKyT3W60daSpvxQaaRvjooowEs6VGEcJY3MlIIJI5qg9zHNyOjc",
+      "yd8TqmzLSmpbtrnr18+7pYcMZafNw1DumrkZaRujkGK2UjVbIgCSK1Qe6NzHyRSUdhn6Wfpx4vYcd2a0597ZKezaqXjLnc3sc59W",
+      "tz/TYoRcl2HHZ2xBsA0RIEEIqKCqgD5IX0dXDX1OvjwN92OnaLKXo67zGqtLFzjnR0dI2nFetvl9zAxyRBuGSoIgEAt1PT/ME1EG",
+      "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",
+      "S26l/I64OfT/2Q=="
+    /*LUMI_ICON_END*/
+  ].join("");
+  const $ = id => document.getElementById(id);
+  $("icon").src = ICON; $("favicon").href = ICON;
+  try{ localStorage.setItem("lumi_icon_v1", ICON); }catch(e){ /* LUMI agent가 같은 그림을 쓰도록 */ }
+  try{ localStorage.setItem("lumi_launcher_ver", "2"); }catch(e){ /* 새 보안 설정(도구용) 실행기 표시 */ }
+
+  function loadCfg(){ try{ return JSON.parse(localStorage.getItem(LS) || "{}"); }catch(e){ return {}; } }
+  function status(text, err){ $("status").textContent = text; $("status").className = err ? "err" : ""; }
+  function b64decode(b64){
+    const bin = atob((b64 || "").replace(/\n/g, ""));
+    return new TextDecoder("utf-8").decode(Uint8Array.from(bin, c => c.charCodeAt(0)));
+  }
+  function show(html){ document.open(); document.write(html); document.close(); }
+  function showSetup(note){
+    const c = loadCfg();
+    $("s_owner").value = c.owner || ""; $("s_repo").value = c.repo || "";
+    $("s_branch").value = c.branch || "main"; $("s_token").value = "";
+    $("setup").classList.remove("hidden"); $("retry").classList.add("hidden");
+    status(note || "저장소에 연결해 주세요.", !!note);
+  }
+
+  async function launch(){
+    const c = loadCfg();
+    if(!(c.token && c.owner && c.repo)){ showSetup(); return; }
+    $("setup").classList.add("hidden"); $("retry").classList.add("hidden");
+    status("최신 LUMI agent를 불러오는 중…");
+    const h = { "Authorization": "Bearer " + c.token, "Accept": "application/vnd.github+json", "X-GitHub-Api-Version": "2022-11-28" };
+    const ref = encodeURIComponent(c.branch || "main");
+    const base = `https://api.github.com/repos/${c.owner}/${c.repo}/contents/remote`;
+    try{
+      const r = await fetch(`${base}?ref=${ref}`, { headers: h });
+      if(r.status === 401 || r.status === 403 || r.status === 404){
+        const e = new Error(`저장소에 연결하지 못했어요 (${r.status}). 저장소 이름과 토큰을 확인해 주세요.`); e.auth = true; throw e;
+      }
+      if(!r.ok) throw new Error(`LUMI agent 목록을 받지 못했어요 (${r.status}).`);
+      const list = (await r.json())
+        .map(f => ({ f, v: (f.name.match(RE) || []).slice(1).map(Number) }))
+        .filter(x => x.v.length === 3)
+        .sort((a, b) => (b.v[0] - a.v[0]) || (b.v[1] - a.v[1]) || (b.v[2] - a.v[2]));
+      if(!list.length) throw new Error("저장소의 remote 폴더에 LUMI agent 파일이 없어요.");
+      const name = list[0].f.name;
+      status(`${name.replace(".html", "")} 여는 중…`);
+      const fr = await fetch(`${base}/${encodeURIComponent(name)}?ref=${ref}`, { headers: h });
+      if(!fr.ok) throw new Error(`LUMI agent 파일을 받지 못했어요 (${fr.status}).`);
+      const html = b64decode((await fr.json()).content);
+      try{ localStorage.setItem(CACHE, JSON.stringify({ name, html })); }catch(e){ /* 저장 공간이 없어도 계속 */ }
+      show(html);
+    }catch(e){
+      if(e.auth){ showSetup(e.message); return; }
+      let cached = null;
+      try{ cached = JSON.parse(localStorage.getItem(CACHE) || "null"); }catch(_){ cached = null; }
+      if(cached && cached.html){ show(cached.html); return; }      // 인터넷이 안 되면 마지막으로 받은 LUMI agent
+      status(e.message + " 인터넷 연결을 확인하고 다시 시도해 주세요.", true);
+      $("retry").classList.remove("hidden");
+    }
+  }
+
+  $("setup").onsubmit = (ev)=>{
+    ev.preventDefault();
+    const owner = $("s_owner").value.trim(), repo = $("s_repo").value.trim(), token = $("s_token").value.trim();
+    if(!owner || !repo || !token){ status("owner, repo, 토큰을 모두 입력해 주세요.", true); return; }
+    const c = loadCfg();
+    localStorage.setItem(LS, JSON.stringify({ ...c, owner, repo, branch: $("s_branch").value.trim() || "main", token }));
+    launch();
+  };
+  $("retry").onclick = launch;
+
+  // ---- 앱(PWA) ----
+  if("serviceWorker" in navigator){ try{ navigator.serviceWorker.register("sw.js").catch(()=>{}); }catch(e){} }
+  let deferred = null;
+  window.addEventListener("beforeinstallprompt", ev => { ev.preventDefault(); deferred = ev; $("installBtn").classList.remove("hidden"); });
+  $("installBtn").onclick = async () => {
+    if(!deferred) return;
+    deferred.prompt(); try{ await deferred.userChoice; }catch(e){}
+    deferred = null; $("installBtn").classList.add("hidden");
+  };
+  $("openNow").onclick = () => { try{ localStorage.setItem("lumi_app_opened", "1"); }catch(e){} $("install").classList.add("hidden"); launch(); };
+  const standalone = (window.matchMedia && matchMedia("(display-mode: standalone)").matches) || navigator.standalone === true;
+  let opened = false; try{ opened = localStorage.getItem("lumi_app_opened") === "1"; }catch(e){}
+  if(standalone || opened || /[?&]open\b/.test(location.search)){ launch(); }
+  else { status("LUMI를 앱으로 설치하세요"); $("install").classList.remove("hidden"); }
+})();
+</script>
+</body>
+</html>
